@@ -1,0 +1,11 @@
+{
+  "name": "Sur Guru Singing Coach",
+  "short_name": "Sur Guru",
+  "description": "A strict but kind singing coach for daily riyaaz.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "orientation": "portrait-primary",
+  "categories": ["music", "education"]
+}
