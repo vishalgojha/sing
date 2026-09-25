@@ -136,11 +136,13 @@ function setStatus(live) {
 function resetScore() {
   scoreSamples = [];
   lastVoicedAt = 0;
+  els.coachBtn.disabled = true;
   ['overallScore', 'pitchScore', 'rhythmScore', 'stabilityScore'].forEach((id) => { els[id].textContent = '--'; });
   ['pitchBar', 'rhythmBar', 'stabilityBar'].forEach((id) => { els[id].style.width = '0%'; });
 }
 
 function updateScore(tuner) {
+  if (!recording) return;
   if (!tuner.voiced || tuner.conf < 0.4 || !tuner.freq) return;
   const now = performance.now();
   const gap = lastVoicedAt ? now - lastVoicedAt : 0;
@@ -148,7 +150,10 @@ function updateScore(tuner) {
   if (scoreSamples.length > 180) scoreSamples.shift();
   lastVoicedAt = now;
   if (scoreSamples.length < 5) return;
+  renderScore(tuner);
+}
 
+function renderScore(tuner = lastTuner) {
   const recent = scoreSamples.slice(-100);
   const avgCents = recent.reduce((sum, item) => sum + item.cents, 0) / recent.length;
   const pitch = Math.max(0, Math.min(100, Math.round(100 - avgCents * 1.8)));
@@ -383,6 +388,7 @@ function drawTuner() {
 // ---- Recording ----
 function startRecording() {
   if (!running || !recorderNode) return;
+  resetScore();
   recording = true;
   recChunks = [];
   recStart = performance.now();
@@ -398,6 +404,11 @@ function startRecording() {
 function stopRecording() {
   if (!recording) return;
   recording = false;
+  if (scoreSamples.length >= 5) {
+    renderScore();
+    els.coachBtn.disabled = false;
+    els.coachMessage.textContent = 'Take captured. Now ask the Guru for feedback.';
+  }
   clearInterval(recTimer);
   els.recordBtn.textContent = '● Record';
   els.recordBtn.classList.remove('recording');
