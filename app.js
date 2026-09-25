@@ -495,12 +495,114 @@ function renderTakes() {
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     });
+    const share = document.createElement('button');
+    share.textContent = 'Share video';
+    share.className = 'share-video';
+    share.addEventListener('click', async () => {
+      share.disabled = true;
+      share.textContent = 'Making video...';
+      try {
+        await shareTakeVideo(take);
+      } catch (error) {
+        console.error(error);
+        alert('Could not create the share video: ' + error.message);
+      } finally {
+        share.disabled = false;
+        share.textContent = 'Share video';
+      }
+    });
     play.addEventListener('click', () => {
       togglePlayback(take, play);
     });
-    li.append(name, dur, play, dl);
+    li.append(name, dur, play, dl, share);
     els.takes.appendChild(li);
   }
+}
+
+async function shareTakeVideo(take) {
+  const context = audioCtx || new AudioContext();
+  await context.resume();
+  const buffer = await context.decodeAudioData(take.wav.slice(0));
+  const canvas = document.createElement('canvas');
+  canvas.width = 720;
+  canvas.height = 1280;
+  const ctx = canvas.getContext('2d');
+  const visual = context.createAnalyser();
+  visual.fftSize = 512;
+  const destination = context.createMediaStreamDestination();
+  const source = context.createBufferSource();
+  source.buffer = buffer;
+  source.connect(visual);
+  visual.connect(destination);
+
+  const videoStream = canvas.captureStream(30);
+  destination.stream.getAudioTracks().forEach((track) => videoStream.addTrack(track));
+  const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+    .find((type) => MediaRecorder.isTypeSupported(type));
+  if (!mime) throw new Error('This browser cannot create share videos');
+
+  const chunks = [];
+  const recorder = new MediaRecorder(videoStream, { mimeType: mime, videoBitsPerSecond: 2500000 });
+  recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
+  const finished = new Promise((resolve) => { recorder.onstop = resolve; });
+  const frequency = new Uint8Array(visual.frequencyBinCount);
+  const start = performance.now();
+  let animation;
+  const draw = () => {
+    const elapsed = (performance.now() - start) / 1000;
+    const progress = Math.min(1, elapsed / buffer.duration);
+    visual.getByteFrequencyData(frequency);
+    const average = frequency.reduce((sum, value) => sum + value, 0) / frequency.length;
+    const gradient = ctx.createLinearGradient(0, 0, 720, 1280);
+    gradient.addColorStop(0, '#111a35');
+    gradient.addColorStop(1, '#0d1117');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 720, 1280);
+    ctx.fillStyle = '#4cc9f0';
+    ctx.globalAlpha = 0.14;
+    ctx.beginPath();
+    ctx.arc(360, 470, 170 + average * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#e6edf3';
+    ctx.font = '700 44px sans-serif';
+    ctx.fillText('SUR GURU', 54, 100);
+    ctx.fillStyle = '#8b949e';
+    ctx.font = '24px sans-serif';
+    ctx.fillText('My riyaaz take', 56, 145);
+    ctx.fillStyle = '#4cc9f0';
+    ctx.font = '700 110px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('♪', 360, 510);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#e6edf3';
+    ctx.font = '600 30px sans-serif';
+    ctx.fillText(`${take.name}  •  ${take.seconds.toFixed(1)}s`, 56, 1110);
+    ctx.fillStyle = '#2a3350';
+    ctx.fillRect(56, 1160, 608, 8);
+    ctx.fillStyle = '#7c5cff';
+    ctx.fillRect(56, 1160, 608 * progress, 8);
+    if (progress < 1) animation = requestAnimationFrame(draw);
+  };
+  recorder.start();
+  source.start();
+  draw();
+  await new Promise((resolve) => { source.onended = resolve; });
+  cancelAnimationFrame(animation);
+  recorder.stop();
+  await finished;
+  videoStream.getTracks().forEach((track) => track.stop());
+  const blob = new Blob(chunks, { type: mime });
+  const file = new File([blob], `${take.name.replace(/\s+/g, '-').toLowerCase()}.webm`, { type: mime });
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    await navigator.share({ title: 'My Sur Guru riyaaz', files: [file] });
+    return;
+  }
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = file.name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 4000);
 }
 
 function togglePlayback(take, btn) {

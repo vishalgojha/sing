@@ -395,6 +395,11 @@ select {
   color: var(--accent-2);
 }
 
+.takes button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .takes button.playback.active {
   background: var(--accent);
   color: #fff;
