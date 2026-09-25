@@ -128,6 +128,25 @@ main {
   gap: 20px;
 }
 
+/* Keep the first version friendly for casual singers; advanced controls remain
+   available in code without competing with the record-and-feedback flow. */
+.controls-grid {
+  display: none;
+}
+
+.tuner-card .tuner {
+  display: none;
+}
+
+.record-card {
+  order: 1;
+}
+
+.coach-grid {
+  order: 2;
+  grid-template-columns: 1fr;
+}
+
 .row {
   display: flex;
   align-items: center;
