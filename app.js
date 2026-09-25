@@ -237,19 +237,19 @@ function coachFeedback() {
   const weakest = Object.entries(scores).sort((a, b) => a[1] - b[1])[0];
   const lines = {
     praise: {
-      sur: ['Sur ne aaj tumhe seen-zone nahi kiya', 'Aaj pitch ne tumhara naam yaad rakha', 'Sur ke saath aaj proper attendance thi'],
-      rhythm: ['Taal ne tumhara appointment accept kiya', 'Aaj rhythm ne tumhe unfollow nahi kiya', 'Beat aur tum ek hi group chat mein the'],
-      stability: ['Awaaz ne earthquake mode se break liya', 'Note ne aaj yoga kiya, kaafi stable tha', 'Aaj voice ne wobble ko chhutti de di'],
+      sur: ['Sur ne aaj tumhe seen-zone nahi kiya', 'Aaj pitch ne tumhara naam yaad rakha', 'Sur ke saath aaj proper attendance thi', 'Note ne tumhe VIP entry de di', 'Aaj tumhara sur aur Sa ek hi family ke nikle', 'Pitch ne aaj tumhare liye red carpet bichaya', 'Sur ne kaha: finally, koi serious student', 'Aaj note ko dhoondhna nahi pada, woh khud mil gaya', 'Tumne sur ko pakda nahi, usse respectfully collaborate kiya', 'Aaj tumhari pitch ne full marks ki taraf selfie li'],
+      rhythm: ['Taal ne tumhara appointment accept kiya', 'Aaj rhythm ne tumhe unfollow nahi kiya', 'Beat aur tum ek hi group chat mein the', 'Taal ne aaj tumhari call utha li', 'Aaj claps ko tumhara tempo samajh aaya', 'Beat ke saath tumhari dosti official ho gayi', 'Aaj rhythm ne tumhe ghost nahi kiya', 'Tumne gaane ko traffic mein nahi, green signal par chalaya', 'Aaj har phrase apni train par time se aaya', 'Taal ne tumhari attendance full mark ki'],
+      stability: ['Awaaz ne earthquake mode se break liya', 'Note ne aaj yoga kiya, kaafi stable tha', 'Aaj voice ne wobble ko chhutti de di', 'Sur ne kursi par seedha baithna seekh liya', 'Aaj note ka balance Olympic level ka tha', 'Tumhari awaaz ne aaj tripod use kiya', 'Pitch ne aaj hilna-dulna politely mana kar diya', 'Aaj note hawa mein nahi, zameen par tha', 'Voice ne turbulence ke bina landing ki', 'Aaj tumhara sur ekdum steady Wi-Fi tha'],
     },
     roast: {
-      sur: ['Sur ko tumne GPS ke bina bhej diya', 'Note ko tumne miss kiya, woh abhi bhi waiting room mein hai', 'Pitch aur tumhari mulaqat bas traffic signal par hui'],
-      rhythm: ['Taal tumse milne aayi thi, tum late pahunch gaye', 'Beat ne attendance lagayi, tumhara naam missing tha', 'Rhythm ko tumne seen karke reply nahi kiya'],
-      stability: ['Note itna hil raha tha ki usko seatbelt chahiye', 'Awaaz ne roller-coaster ko serious competition diya', 'Sur khada tha, tumne usko trampoline bana diya'],
+      sur: ['Sur ko tumne GPS ke bina bhej diya', 'Note ko tumne miss kiya, woh abhi bhi waiting room mein hai', 'Pitch aur tumhari mulaqat bas traffic signal par hui', 'Sur paas tha, tumne usko long-distance relationship bana diya', 'Note ne location bheji, tumne wrong pin open kar li', 'Aaj pitch ka compass holiday par tha', 'Sur tumse milne aaya tha, tum kisi aur note se baat kar rahe the', 'Tumne note ko itna avoid kiya ki woh unfollow karne wala hai', 'Pitch aur target ki shaadi mein baraat alag-alag pahunchi', 'Aaj sur ka network full tha, phone tumhara out of coverage'],
+      rhythm: ['Taal tumse milne aayi thi, tum late pahunch gaye', 'Beat ne attendance lagayi, tumhara naam missing tha', 'Rhythm ko tumne seen karke reply nahi kiya', 'Taal ko tumne Monday morning jaisa treat kiya', 'Beat chal rahi thi, tum apni hi web series mein the', 'Tempo ko tumne elevator samjha, kabhi upar kabhi neeche', 'Rhythm ne knock kiya, tumne wrong door khola', 'Aaj gaana beat ke saath nahi, beat ke khilaaf tha', 'Metronome tumhe dekhkar resignation likh raha hai', 'Taal ko tumne casual liya, usne bhi tumhe casual marks diye'],
+      stability: ['Note itna hil raha tha ki usko seatbelt chahiye', 'Awaaz ne roller-coaster ko serious competition diya', 'Sur khada tha, tumne usko trampoline bana diya', 'Note ka balance dekhkar yoga instructor bhi tense hai', 'Aaj pitch ke pairon mein skating shoes the', 'Awaaz ne wobble ko main character bana diya', 'Sur ek jagah rukna chahta tha, tumne usko sightseeing kara di', 'Note ne stability maangi, tumne adventure package de diya', 'Aaj voice ka steering kisi aur ke haath mein tha', 'Pitch itni hil rahi thi ki mobile ka gyroscope bhi confuse ho gaya'],
     },
     correction: {
-      sur: ['drone suno aur note ke beech mein land karo', 'pehle Sa pakdo, phir gaana start karo', 'note ko chase mat karo, usko calmly invite karo'],
-      rhythm: ['metronome ke saath dheere practice karo', 'pehle clap karo, phir gaaoge', 'har phrase ko ek steady walking pace do'],
-      stability: ['ek note ko teen seconds seedha hold karo', 'volume kam rakho aur airflow smooth karo', 'note ko pakad kar rakho, uske saath wrestling mat karo'],
+      sur: ['drone suno aur note ke beech mein land karo', 'pehle Sa pakdo, phir gaana start karo', 'note ko chase mat karo, usko calmly invite karo', 'ek baar hum karo, phir wahi pitch par gaaoge', 'target note ko pehle suno, phir awaaz bhejo', 'high ya low guess mat karo, drone ko apna Google Maps banao', 'phrase se pehle Sa ko anchor banao', 'har note par brake lagao aur suno ki tum kahan ho', 'pitch ko force nahi, listening se correct karo', 'pehle ek clean note, phir speed aur style'],
+      rhythm: ['metronome ke saath dheere practice karo', 'pehle clap karo, phir gaaoge', 'har phrase ko ek steady walking pace do', 'lyrics ko beat ke upar baithao, beat se bhaagao mat', 'count karke start karo, surprise entry mat do', 'ek tempo choose karo aur usko poore phrase tak rakho', 'haath se taal do, phir wahi pulse awaaz mein lao', 'slow practice ko boring nahi, secret weapon samjho', 'har note ko beat ki seat do', 'pehle groove pakdo, phir decoration add karo'],
+      stability: ['ek note ko teen seconds seedha hold karo', 'volume kam rakho aur airflow smooth karo', 'note ko pakad kar rakho, uske saath wrestling mat karo', 'saans ko support do, gale ko steering wheel mat banao', 'note start karne se pehle relaxed breath lo', 'jaw aur shoulders loose rakho', 'sustain ke end tak same vowel rakho', 'kam volume mein clean hold practice karo', 'pitch ko shake hone se pehle listen karke reset karo', 'ek steady note ko five-count tak carry karo'],
     },
   };
   const pick = (group, dimension) => {
@@ -263,9 +263,9 @@ function coachFeedback() {
   const roast = pick('roast', weakest[0]);
   const correction = pick('correction', weakest[0]);
   const openers = {
-    strict: ['Sun, superstar', 'Guru ki adalat mein', 'Beta, ek minute'],
-    warm: ['Arre wah, singer ji', 'Pyaara effort', 'Chalo, sur ki taraf'],
-    drill: ['Attention, vocalist', 'No excuses, singer', 'Mic sambhalo, champion'],
+    strict: ['Sun, superstar', 'Guru ki adalat mein', 'Beta, ek minute', 'Suno, playback singer', 'Aaj ka report card aa gaya', 'Mic ke saamne sach bolna padega'],
+    warm: ['Arre wah, singer ji', 'Pyaara effort', 'Chalo, sur ki taraf', 'Kya baat hai, almost magic', 'Aaj riyaaz mein sparkle hai', 'Dil se gaya, ab technique suno'],
+    drill: ['Attention, vocalist', 'No excuses, singer', 'Mic sambhalo, champion', 'Vocal warm-up ke baad report', 'Posture seedha, ears open', 'Aaj ka drill shuru'],
   };
   const opener = openers[els.mood.value][Math.floor(Math.random() * 3)];
   const verdict = weakest[1] < 55 ? `${roast}. ${correction}.` : `${roast}, par correction simple hai: ${correction}.`;
