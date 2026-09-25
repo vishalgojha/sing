@@ -1,0 +1,584 @@
+const SCALES = {
+  chromatic: { name: 'Chromatic (all notes)', intervals: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
+  major: { name: 'Major', intervals: [0, 2, 4, 5, 7, 9, 11] },
+  minor: { name: 'Natural minor', intervals: [0, 2, 3, 5, 7, 8, 10] },
+  majorPent: { name: 'Major pentatonic', intervals: [0, 2, 4, 7, 9] },
+  minorPent: { name: 'Minor pentatonic', intervals: [0, 3, 5, 7, 10] },
+  blues: { name: 'Blues', intervals: [0, 3, 5, 6, 7, 10] },
+};
+
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+const $ = (id) => document.getElementById(id);
+
+const els = {
+  startBtn: $('startBtn'),
+  statusBadge: $('statusBadge'),
+  strength: $('strength'),
+  strengthVal: $('strengthVal'),
+  mix: $('mix'),
+  mixVal: $('mixVal'),
+  bypass: $('bypass'),
+  monitor: $('monitor'),
+  root: $('root'),
+  scale: $('scale'),
+  scaleDots: $('scaleDots'),
+  reverb: $('reverb'),
+  reverbVal: $('reverbVal'),
+  roomSize: $('roomSize'),
+  roomVal: $('roomVal'),
+  noteLabel: $('noteLabel'),
+  targetLabel: $('targetLabel'),
+  freqVal: $('freqVal'),
+  ratioVal: $('ratioVal'),
+  confVal: $('confVal'),
+  recordBtn: $('recordBtn'),
+  recTime: $('recTime'),
+  takes: $('takes'),
+  meter: $('meter'),
+  exercise: $('exercise'),
+  mood: $('mood'),
+  coachBtn: $('coachBtn'),
+  coachMessage: $('coachMessage'),
+  exerciseLabel: $('exerciseLabel'),
+  overallScore: $('overallScore'),
+  pitchScore: $('pitchScore'),
+  rhythmScore: $('rhythmScore'),
+  stabilityScore: $('stabilityScore'),
+  pitchBar: $('pitchBar'),
+  rhythmBar: $('rhythmBar'),
+  stabilityBar: $('stabilityBar'),
+};
+
+const ctx2d = els.meter.getContext('2d');
+
+let audioCtx = null;
+let micStream = null;
+let sourceNode = null;
+let pitchNode = null;
+let recorderNode = null;
+let dryGain = null;
+let sendGain = null;
+let convolver = null;
+let wetGain = null;
+let masterGain = null;
+let monitorGain = null;
+
+let running = false;
+let recording = false;
+let recStart = 0;
+let recChunks = [];
+let recTimer = null;
+let takes = [];
+let lastTuner = { cents: 0, note: '-', conf: 0, freq: 0, voiced: false };
+let currentAudio = null;
+let scoreSamples = [];
+let lastVoicedAt = 0;
+let lastCoachText = '';
+
+const EXERCISES = {
+  sa: { label: 'Sa practice', target: 'Sa', hint: 'Hold Sa', targetMidi: 60 },
+  sarega: { label: 'Sa Re Ga Ma', target: 'Sa → Re → Ga → Ma', hint: 'Sing the ascending pattern', targetMidi: 60 },
+  saregaresasa: { label: 'Palta practice', target: 'Sa Re Ga Ma → Ga Re Sa', hint: 'Sing the pattern slowly', targetMidi: 60 },
+};
+
+function populateSelectors() {
+  for (let i = 0; i < 12; i++) {
+    const opt = document.createElement('option');
+    opt.value = String(60 + i);
+    opt.textContent = NOTE_NAMES[i] + 4;
+    els.root.appendChild(opt);
+  }
+  els.root.value = '60';
+  for (const key of Object.keys(SCALES)) {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = SCALES[key].name;
+    els.scale.appendChild(opt);
+  }
+  els.scale.value = 'major';
+}
+
+function renderScaleDots() {
+  const ivs = SCALES[els.scale.value].intervals;
+  els.scaleDots.innerHTML = '';
+  for (let i = 0; i < 12; i++) {
+    const d = document.createElement('span');
+    d.className = 'scale-dot' + (ivs.includes(i) ? ' on' : '');
+    d.textContent = NOTE_NAMES[i].replace('#', '#');
+    d.title = NOTE_NAMES[i];
+    els.scaleDots.appendChild(d);
+  }
+}
+
+function currentParams() {
+  return {
+    type: 'params',
+    strength: Number(els.strength.value) / 100,
+    bypass: els.bypass.checked,
+    mix: Number(els.mix.value) / 100,
+    scaleIntervals: SCALES[els.scale.value].intervals,
+    rootMidi: Number(els.root.value),
+  };
+}
+
+function pushParams() {
+  if (pitchNode && pitchNode.port) pitchNode.port.postMessage(currentParams());
+}
+
+function setStatus(live) {
+  running = live;
+  els.statusBadge.textContent = live ? 'live' : 'offline';
+  els.statusBadge.className = 'badge ' + (live ? 'live' : 'idle');
+  els.startBtn.textContent = live ? 'Stop microphone' : 'Start microphone';
+}
+
+function resetScore() {
+  scoreSamples = [];
+  lastVoicedAt = 0;
+  ['overallScore', 'pitchScore', 'rhythmScore', 'stabilityScore'].forEach((id) => { els[id].textContent = '--'; });
+  ['pitchBar', 'rhythmBar', 'stabilityBar'].forEach((id) => { els[id].style.width = '0%'; });
+}
+
+function updateScore(tuner) {
+  if (!tuner.voiced || tuner.conf < 0.4 || !tuner.freq) return;
+  const now = performance.now();
+  const gap = lastVoicedAt ? now - lastVoicedAt : 0;
+  scoreSamples.push({ cents: Math.abs(tuner.centsToTarget || tuner.cents || 0), gap, at: now });
+  if (scoreSamples.length > 180) scoreSamples.shift();
+  lastVoicedAt = now;
+  if (scoreSamples.length < 5) return;
+
+  const recent = scoreSamples.slice(-100);
+  const avgCents = recent.reduce((sum, item) => sum + item.cents, 0) / recent.length;
+  const pitch = Math.max(0, Math.min(100, Math.round(100 - avgCents * 1.8)));
+  const gaps = recent.slice(1).map((item) => item.gap).filter((gap) => gap > 0 && gap < 1500);
+  const averageGap = gaps.length ? gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length : 0;
+  const rhythmVariance = gaps.length > 2 ? Math.sqrt(gaps.reduce((sum, gap) => sum + Math.pow(gap - averageGap, 2), 0) / gaps.length) : 0;
+  const rhythm = Math.max(0, Math.min(100, Math.round(100 - rhythmVariance / 8)));
+  const stability = Math.max(0, Math.min(100, Math.round(100 - Math.min(100, Math.abs((tuner.cents || 0) * 1.4)))));
+  const overall = Math.round(pitch * 0.55 + rhythm * 0.2 + stability * 0.25);
+  setScore('pitchScore', 'pitchBar', pitch);
+  setScore('rhythmScore', 'rhythmBar', rhythm);
+  setScore('stabilityScore', 'stabilityBar', stability);
+  els.overallScore.textContent = overall;
+}
+
+function setScore(labelId, barId, value) {
+  els[labelId].textContent = value;
+  els[barId].style.width = `${value}%`;
+}
+
+async function speak(text) {
+  lastCoachText = text;
+  // The server proxy uses ElevenLabs when ELEVENLABS_API_KEY is configured.
+  try {
+    const response = await fetch('/api/speak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+    if (response.ok) {
+      const audio = new Audio(URL.createObjectURL(await response.blob()));
+      await audio.play();
+      return;
+    }
+  } catch {}
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'hi-IN';
+    utterance.rate = els.mood.value === 'drill' ? 1.08 : 0.95;
+    window.speechSynthesis.speak(utterance);
+  }
+}
+
+function coachFeedback() {
+  const samples = scoreSamples.slice(-100);
+  if (samples.length < 5) return 'Pehle microphone start karo aur kam se kam kuch seconds gaaoge. Guru hawa mein marks nahi deta.';
+  const avg = samples.reduce((sum, item) => sum + item.cents, 0) / samples.length;
+  const score = Number(els.overallScore.textContent) || 0;
+  const strict = els.mood.value === 'warm' ? 'Achha prayas' : els.mood.value === 'drill' ? 'Dhyaan se suno' : 'Sun, beta';
+  if (avg > 35) return `${strict}: sur kaafi idhar-udhar hai. Tanpura ke Sa ko pakdo, phir dheere gaa. ${score} marks, aur mehnat chahiye.`;
+  if (avg > 15) return `${strict}: note ke paas ho, lekin abhi sur hil raha hai. Saaf awaaz mein ek baar aur. ${score} marks.`;
+  return `${strict}: wah, sur pakad liya. Ab note ko stable rakho aur jaldi mat karo. ${score} marks, shabash.`;
+}
+
+async function buildGraph() {
+  const sr = 48000;
+  audioCtx = new AudioContext({ sampleRate: sr, latencyHint: 'interactive' });
+  await audioCtx.resume();
+
+  micStream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+    },
+  });
+
+  await audioCtx.audioWorklet.addModule('worklet/pitch-processor.js');
+  await audioCtx.audioWorklet.addModule('worklet/recorder-processor.js');
+
+  sourceNode = audioCtx.createMediaStreamSource(micStream);
+  pitchNode = new AudioWorkletNode(audioCtx, 'pitch-processor', {
+    numberOfInputs: 1,
+    numberOfOutputs: 1,
+    channelCount: 1,
+    channelCountMode: 'explicit',
+    outputChannelCount: [1],
+    processorOptions: { sampleRate: sr },
+  });
+
+  recorderNode = new AudioWorkletNode(audioCtx, 'recorder-processor', {
+    numberOfInputs: 1,
+    numberOfOutputs: 1,
+  });
+
+  dryGain = audioCtx.createGain();
+  sendGain = audioCtx.createGain();
+  wetGain = audioCtx.createGain();
+  masterGain = audioCtx.createGain();
+  monitorGain = audioCtx.createGain();
+  convolver = audioCtx.createConvolver();
+
+  buildImpulseResponse(audioCtx, convolver, Number(els.roomSize.value));
+
+  sourceNode.connect(pitchNode);
+  pitchNode.connect(dryGain);
+  dryGain.connect(masterGain);
+  dryGain.connect(sendGain);
+  sendGain.connect(convolver);
+  convolver.connect(wetGain);
+  wetGain.connect(masterGain);
+  masterGain.connect(recorderNode);
+  recorderNode.connect(monitorGain);
+  monitorGain.connect(audioCtx.destination);
+
+  masterGain.gain.value = 0.9;
+  monitorGain.gain.value = els.monitor.checked ? 1 : 0;
+  updateReverb();
+
+  pitchNode.port.onmessage = (e) => {
+    if (e.data && e.data.type === 'tuner') {
+      lastTuner = e.data;
+      updateScore(e.data);
+    }
+  };
+
+  recorderNode.port.onmessage = (e) => {
+    if (e.data && e.data.type === 'audio') recChunks.push(e.data.buf);
+  };
+
+  pushParams();
+}
+
+function buildImpulseResponse(audioCtx, convolver, sizePct) {
+  const seconds = 0.8 + (sizePct / 100) * 2.2;
+  const len = Math.floor(audioCtx.sampleRate * seconds);
+  const buf = audioCtx.createBuffer(2, len, audioCtx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) {
+      const t = i / audioCtx.sampleRate;
+      const decay = Math.exp(-t * (1.2 + sizePct * 0.05));
+      data[i] = (Math.random() * 2 - 1) * decay;
+    }
+  }
+  convolver.buffer = buf;
+}
+
+function updateReverb() {
+  const amt = Number(els.reverb.value) / 100;
+  sendGain.gain.value = amt * 0.9;
+  wetGain.gain.value = amt * 0.9;
+}
+
+async function startEngine() {
+  try {
+    await buildGraph();
+    setStatus(true);
+  } catch (err) {
+    setStatus(false);
+    console.error(err);
+    alert('Could not start microphone: ' + err.message);
+  }
+}
+
+function stopEngine() {
+  if (recording) stopRecording();
+  if (pitchNode) {
+    try { pitchNode.disconnect(); } catch {}
+  }
+  if (sourceNode) sourceNode.disconnect();
+  if (micStream) micStream.getTracks().forEach((t) => t.stop());
+  if (audioCtx) { audioCtx.close(); audioCtx = null; }
+  pitchNode = recorderNode = sourceNode = micStream = null;
+  resetScore();
+  setStatus(false);
+}
+
+els.startBtn.addEventListener('click', () => {
+  if (running) stopEngine();
+  else startEngine();
+});
+
+// ---- Tuner drawing ----
+function drawTuner() {
+  const w = els.meter.width;
+  const h = els.meter.height;
+  const cx = w / 2;
+  const cy = h / 2;
+  ctx2d.clearRect(0, 0, w, h);
+
+  const show = lastTuner.voiced && lastTuner.conf > 0.4;
+  const cents = show ? Math.max(-50, Math.min(50, lastTuner.cents)) : 0;
+
+  ctx2d.strokeStyle = '#2a3350';
+  ctx2d.lineWidth = 2;
+  for (let c = -50; c <= 50; c += 10) {
+    const x = cx + (c / 50) * (w / 2 - 30);
+    ctx2d.beginPath();
+    ctx2d.moveTo(x, cy - 26);
+    ctx2d.lineTo(x, cy + 26);
+    ctx2d.stroke();
+  }
+
+  ctx2d.fillStyle = '#8b949e';
+  ctx2d.font = '12px Inter, sans-serif';
+  ctx2d.textAlign = 'center';
+  ctx2d.fillText('-50', 32, cy - 34);
+  ctx2d.fillText('0', cx, cy - 34);
+  ctx2d.fillText('+50', w - 32, cy - 34);
+
+  ctx2d.strokeStyle = '#3fb950';
+  ctx2d.lineWidth = 3;
+  ctx2d.beginPath();
+  ctx2d.moveTo(cx, cy - 26);
+  ctx2d.lineTo(cx, cy + 26);
+  ctx2d.stroke();
+
+  if (show) {
+    const color = Math.abs(cents) <= 5 ? '#3fb950' : Math.abs(cents) <= 15 ? '#d29922' : '#f85149';
+    const x = cx + (cents / 50) * (w / 2 - 30);
+    ctx2d.fillStyle = color;
+    ctx2d.shadowColor = color;
+    ctx2d.shadowBlur = 14;
+    ctx2d.beginPath();
+    ctx2d.moveTo(x, cy - 36);
+    ctx2d.lineTo(x - 9, cy - 14);
+    ctx2d.lineTo(x + 9, cy - 14);
+    ctx2d.closePath();
+    ctx2d.fill();
+    ctx2d.shadowBlur = 0;
+  }
+
+  els.noteLabel.textContent = lastTuner.voiced ? lastTuner.note : '-';
+  els.targetLabel.textContent = lastTuner.voiced
+    ? `target: ${lastTuner.targetNote} (${lastTuner.centsToTarget >= 0 ? '+' : ''}${lastTuner.centsToTarget} cents)`
+    : 'target: -';
+  els.freqVal.textContent = lastTuner.voiced ? lastTuner.freq + ' Hz' : '-';
+  els.ratioVal.textContent = lastTuner.voiced ? 'x' + lastTuner.ratio : '-';
+  els.confVal.textContent = lastTuner.voiced ? lastTuner.conf.toFixed(2) : '-';
+
+  requestAnimationFrame(drawTuner);
+}
+
+// ---- Recording ----
+function startRecording() {
+  if (!running || !recorderNode) return;
+  recording = true;
+  recChunks = [];
+  recStart = performance.now();
+  els.recordBtn.textContent = '● Stop';
+  els.recordBtn.classList.add('recording');
+  recorderNode.port.postMessage({ type: 'record', on: true });
+  recTimer = setInterval(() => {
+    const s = Math.floor((performance.now() - recStart) / 1000);
+    els.recTime.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }, 250);
+}
+
+function stopRecording() {
+  if (!recording) return;
+  recording = false;
+  clearInterval(recTimer);
+  els.recordBtn.textContent = '● Record';
+  els.recordBtn.classList.remove('recording');
+  if (recorderNode && recorderNode.port) recorderNode.port.postMessage({ type: 'record', on: false });
+
+  let len = 0;
+  for (const c of recChunks) len += c.length;
+  if (len === 0) return;
+  const samples = new Float32Array(len);
+  let off = 0;
+  for (const c of recChunks) {
+    samples.set(c, off);
+    off += c.length;
+  }
+  const sr = audioCtx ? audioCtx.sampleRate : 48000;
+  const seconds = samples.length / sr;
+  const num = takes.length + 1;
+  const take = {
+    id: Date.now(),
+    name: `Take ${num}`,
+    seconds,
+    wav: encodeWav(samples, sr),
+  };
+  takes.unshift(take);
+  els.recTime.textContent = '0:00';
+  renderTakes();
+}
+
+function encodeWav(samples, sampleRate) {
+  const n = samples.length;
+  const buffer = new ArrayBuffer(44 + n * 2);
+  const view = new DataView(buffer);
+  const writeStr = (o, s) => {
+    for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i));
+  };
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + n * 2, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, 'data');
+  view.setUint32(40, n * 2, true);
+  let o = 44;
+  for (let i = 0; i < n; i++) {
+    let s = samples[i];
+    if (s > 1) s = 1;
+    else if (s < -1) s = -1;
+    view.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    o += 2;
+  }
+  return buffer;
+}
+
+function renderTakes() {
+  els.takes.innerHTML = '';
+  if (takes.length === 0) {
+    els.takes.innerHTML = '<li class="empty-takes">No takes yet. Hit record and sing!</li>';
+    return;
+  }
+  for (const take of takes) {
+    const li = document.createElement('li');
+    const name = document.createElement('span');
+    name.className = 'take-name';
+    name.textContent = take.name;
+    const dur = document.createElement('span');
+    dur.className = 'take-dur';
+    dur.textContent = `${take.seconds.toFixed(1)}s`;
+    const play = document.createElement('button');
+    play.textContent = 'Play';
+    play.className = 'playback';
+    const dl = document.createElement('button');
+    dl.textContent = 'Download';
+    dl.addEventListener('click', () => {
+      const blob = new Blob([take.wav], { type: 'audio/wav' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${take.name.replace(/\s+/g, '-').toLowerCase()}.wav`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    });
+    play.addEventListener('click', () => {
+      togglePlayback(take, play);
+    });
+    li.append(name, dur, play, dl);
+    els.takes.appendChild(li);
+  }
+}
+
+function togglePlayback(take, btn) {
+  if (!audioCtx) return;
+  if (currentAudio) {
+    stopPlayback();
+    if (currentAudio.takeId === take.id) {
+      btn.classList.remove('active');
+      return;
+    }
+  }
+  const buf = audioCtx.createBuffer(1, take.wav.byteLength / 2 - 22, 48000);
+  const ch = buf.getChannelData(0);
+  const view = new DataView(take.wav);
+  for (let i = 0; i < ch.length; i++) {
+    const s = view.getInt16(44 + i * 2, true);
+    ch[i] = s / 32768;
+  }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const g = audioCtx.createGain();
+  g.gain.value = 0.9;
+  src.connect(g);
+  g.connect(audioCtx.destination);
+  src.onended = () => {
+    currentAudio = null;
+    document.querySelectorAll('.playback').forEach((b) => b.classList.remove('active'));
+  };
+  src.start();
+  currentAudio = { src, takeId: take.id };
+  btn.classList.add('active');
+}
+
+function stopPlayback() {
+  if (!currentAudio) return;
+  try { currentAudio.src.stop(); } catch {}
+  currentAudio = null;
+}
+
+els.recordBtn.addEventListener('click', () => {
+  if (recording) stopRecording();
+  else startRecording();
+});
+
+els.exercise.addEventListener('change', () => {
+  const exercise = EXERCISES[els.exercise.value];
+  els.exerciseLabel.textContent = exercise.label;
+  els.coachMessage.textContent = `${exercise.hint}. Jab taiyaar ho, microphone start karo.`;
+  resetScore();
+});
+
+els.coachBtn.addEventListener('click', () => {
+  const text = coachFeedback();
+  els.coachMessage.textContent = text;
+  speak(text);
+});
+
+// ---- Event wiring ----
+els.strength.addEventListener('input', () => {
+  els.strengthVal.textContent = els.strength.value + '%';
+  pushParams();
+});
+els.mix.addEventListener('input', () => {
+  els.mixVal.textContent = els.mix.value === '100' ? '100% corrected' : els.mix.value + '% corrected';
+  pushParams();
+});
+els.bypass.addEventListener('change', pushParams);
+els.root.addEventListener('change', () => {
+  renderScaleDots();
+  pushParams();
+});
+els.scale.addEventListener('change', () => {
+  renderScaleDots();
+  pushParams();
+});
+els.reverb.addEventListener('input', () => {
+  els.reverbVal.textContent = els.reverb.value + '%';
+  updateReverb();
+});
+els.roomSize.addEventListener('input', () => {
+  els.roomVal.textContent = els.roomSize.value + '%';
+  if (audioCtx && convolver) buildImpulseResponse(audioCtx, convolver, Number(els.roomSize.value));
+});
+els.monitor.addEventListener('change', () => {
+  if (monitorGain) monitorGain.gain.value = els.monitor.checked ? 1 : 0;
+});
+
+populateSelectors();
+els.exerciseLabel.textContent = EXERCISES[els.exercise.value].label;
+renderScaleDots();
+resetScore();
+drawTuner();

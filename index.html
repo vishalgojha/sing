@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sur Guru — your strict singing coach</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">V</span>
+      <div>
+        <h1>Sur Guru</h1>
+        <p>your strict, supportive singing coach</p>
+      </div>
+    </div>
+    <div class="mic-box">
+      <button id="startBtn" class="btn btn-primary">Start microphone</button>
+      <span id="statusBadge" class="badge idle">offline</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="card tuner-card">
+      <div class="section-heading">
+        <div>
+          <h2>Live sur check</h2>
+          <p class="eyebrow">Sing the highlighted note and keep it steady</p>
+        </div>
+        <span id="exerciseLabel" class="exercise-pill">Sa practice</span>
+      </div>
+      <div class="tuner">
+        <div class="note-display">
+          <span id="noteLabel" class="big-note">&ndash;</span>
+          <span id="targetLabel" class="target-note">target: &ndash;</span>
+        </div>
+        <div class="meter-wrap">
+          <canvas id="meter" width="520" height="120"></canvas>
+          <div class="meter-labels">
+            <span>flat</span><span class="meter-ok">in tune</span><span>sharp</span>
+          </div>
+        </div>
+        <div class="tuner-stats">
+          <div><span class="stat">freq</span><span id="freqVal">&ndash;</span></div>
+          <div><span class="stat">correction</span><span id="ratioVal">&ndash;</span></div>
+          <div><span class="stat">confidence</span><span id="confVal">&ndash;</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="coach-grid">
+      <div class="card exercise-card">
+        <div class="section-heading">
+          <div>
+            <h2>Today's riyaaz</h2>
+            <p class="eyebrow">Simple exercises first. Classical depth later.</p>
+          </div>
+          <span class="guru-mark">ॐ</span>
+        </div>
+        <label class="row">
+          <span>Exercise</span>
+          <select id="exercise">
+            <option value="sa">Hold Sa</option>
+            <option value="sarega">Sa Re Ga Ma</option>
+            <option value="saregaresasa">Sa Re Ga Ma, Ga Re Sa</option>
+          </select>
+        </label>
+        <label class="row">
+          <span>Guru mood</span>
+          <select id="mood">
+            <option value="strict">Strict but kind</option>
+            <option value="warm">Warm and encouraging</option>
+            <option value="drill">No-nonsense drill sergeant</option>
+          </select>
+        </label>
+        <button id="coachBtn" class="btn btn-primary coach-btn">Ask the Guru</button>
+        <p id="coachMessage" class="coach-message">Start the microphone, then sing for a few seconds.</p>
+      </div>
+      <div class="card score-card">
+        <div class="section-heading">
+          <div>
+            <h2>Practice score</h2>
+            <p class="eyebrow">Live estimates from your microphone</p>
+          </div>
+          <strong id="overallScore" class="score-number">--</strong>
+        </div>
+        <div class="score-row"><span>Sur / pitch</span><strong id="pitchScore">--</strong><div class="score-track"><i id="pitchBar"></i></div></div>
+        <div class="score-row"><span>Rhythm</span><strong id="rhythmScore">--</strong><div class="score-track"><i id="rhythmBar"></i></div></div>
+        <div class="score-row"><span>Stability</span><strong id="stabilityScore">--</strong><div class="score-track"><i id="stabilityBar"></i></div></div>
+        <p class="score-note">Scores appear after you sing a voiced note for a moment.</p>
+      </div>
+    </section>
+
+    <section class="controls-grid">
+      <div class="card">
+        <h2>Correction</h2>
+        <label class="row">
+          <span>Strength</span>
+          <input type="range" id="strength" min="0" max="100" value="60" />
+          <output id="strengthVal">60%</output>
+        </label>
+        <label class="row">
+          <span>Dry / wet mix</span>
+          <input type="range" id="mix" min="0" max="100" value="100" />
+          <output id="mixVal">100% corrected</output>
+        </label>
+        <label class="row toggle-row">
+          <span>Bypass (A/B compare)</span>
+          <input type="checkbox" id="bypass" class="toggle" />
+        </label>
+        <label class="row toggle-row">
+          <span>Monitor (hear yourself)</span>
+          <input type="checkbox" id="monitor" class="toggle" checked />
+        </label>
+      </div>
+
+      <div class="card">
+        <h2>Scale</h2>
+        <label class="row">
+          <span>Root</span>
+          <select id="root"></select>
+        </label>
+        <label class="row">
+          <span>Scale</span>
+          <select id="scale"></select>
+        </label>
+        <div id="scaleDots" class="scale-dots"></div>
+      </div>
+
+      <div class="card">
+        <h2>Reverb</h2>
+        <label class="row">
+          <span>Amount</span>
+          <input type="range" id="reverb" min="0" max="100" value="25" />
+          <output id="reverbVal">25%</output>
+        </label>
+        <label class="row">
+          <span>Room size</span>
+          <input type="range" id="roomSize" min="10" max="100" value="45" />
+          <output id="roomVal">45%</output>
+        </label>
+        <p class="hint">Latency while monitoring is roughly 45ms — great for practice, not for live stage.</p>
+      </div>
+    </section>
+
+    <section class="card record-card">
+      <h2>Record</h2>
+      <div class="record-row">
+        <button id="recordBtn" class="btn btn-record">● Record</button>
+        <span id="recTime" class="rec-time">0:00</span>
+      </div>
+      <ul id="takes" class="takes"></ul>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
