@@ -75,6 +75,8 @@ let currentAudio = null;
 let scoreSamples = [];
 let lastVoicedAt = 0;
 let lastCoachText = '';
+let feedbackHistory = [];
+let sessionDb = null;
 
 const EXERCISES = {
   sa: { label: 'Sa practice', target: 'Sa', hint: 'Hold Sa', targetMidi: 60 },
@@ -141,6 +143,34 @@ function resetScore() {
   ['pitchBar', 'rhythmBar', 'stabilityBar'].forEach((id) => { els[id].style.width = '0%'; });
 }
 
+function openSessionDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('sur-guru-sessions', 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('takes', { keyPath: 'id' });
+    request.onsuccess = () => { sessionDb = request.result; resolve(sessionDb); };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function saveTake(take) {
+  if (!sessionDb) return;
+  const tx = sessionDb.transaction('takes', 'readwrite');
+  tx.objectStore('takes').put(take);
+}
+
+async function loadStoredTakes() {
+  try {
+    await openSessionDb();
+    const request = sessionDb.transaction('takes', 'readonly').objectStore('takes').getAll();
+    request.onsuccess = () => {
+      takes = request.result.sort((a, b) => b.id - a.id);
+      renderTakes();
+    };
+  } catch (error) {
+    console.warn('Session storage unavailable', error);
+  }
+}
+
 function updateScore(tuner) {
   if (!recording) return;
   if (!tuner.voiced || tuner.conf < 0.4 || !tuner.freq) return;
@@ -205,21 +235,33 @@ function coachFeedback() {
   };
   const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
   const weakest = Object.entries(scores).sort((a, b) => a[1] - b[1])[0];
-  const praise = {
-    sur: 'Sur ne aaj tumhe seen-zone nahi kiya',
-    rhythm: 'Taal ne tumhara appointment accept kiya',
-    stability: 'Awaaz ne earthquake mode se break liya',
-  }[best[0]];
-  const roast = {
-    sur: 'Sur ko tumne GPS ke bina bhej diya',
-    rhythm: 'Taal tumse milne aayi thi, tum late pahunch gaye',
-    stability: 'Note itna hil raha tha ki usko seatbelt chahiye',
-  }[weakest[0]];
-  const correction = {
-    sur: 'drone suno aur note ke beech mein land karo',
-    rhythm: 'metronome ke saath dheere practice karo',
-    stability: 'ek note ko kam se kam teen seconds seedha hold karo',
-  }[weakest[0]];
+  const lines = {
+    praise: {
+      sur: ['Sur ne aaj tumhe seen-zone nahi kiya', 'Aaj pitch ne tumhara naam yaad rakha', 'Sur ke saath aaj proper attendance thi'],
+      rhythm: ['Taal ne tumhara appointment accept kiya', 'Aaj rhythm ne tumhe unfollow nahi kiya', 'Beat aur tum ek hi group chat mein the'],
+      stability: ['Awaaz ne earthquake mode se break liya', 'Note ne aaj yoga kiya, kaafi stable tha', 'Aaj voice ne wobble ko chhutti de di'],
+    },
+    roast: {
+      sur: ['Sur ko tumne GPS ke bina bhej diya', 'Note ko tumne miss kiya, woh abhi bhi waiting room mein hai', 'Pitch aur tumhari mulaqat bas traffic signal par hui'],
+      rhythm: ['Taal tumse milne aayi thi, tum late pahunch gaye', 'Beat ne attendance lagayi, tumhara naam missing tha', 'Rhythm ko tumne seen karke reply nahi kiya'],
+      stability: ['Note itna hil raha tha ki usko seatbelt chahiye', 'Awaaz ne roller-coaster ko serious competition diya', 'Sur khada tha, tumne usko trampoline bana diya'],
+    },
+    correction: {
+      sur: ['drone suno aur note ke beech mein land karo', 'pehle Sa pakdo, phir gaana start karo', 'note ko chase mat karo, usko calmly invite karo'],
+      rhythm: ['metronome ke saath dheere practice karo', 'pehle clap karo, phir gaaoge', 'har phrase ko ek steady walking pace do'],
+      stability: ['ek note ko teen seconds seedha hold karo', 'volume kam rakho aur airflow smooth karo', 'note ko pakad kar rakho, uske saath wrestling mat karo'],
+    },
+  };
+  const pick = (group, dimension) => {
+    const options = lines[group][dimension].filter((line) => !feedbackHistory.includes(line));
+    const line = (options.length ? options : lines[group][dimension])[Math.floor(Math.random() * (options.length || lines[group][dimension].length))];
+    feedbackHistory.push(line);
+    if (feedbackHistory.length > 8) feedbackHistory.shift();
+    return line;
+  };
+  const praise = pick('praise', best[0]);
+  const roast = pick('roast', weakest[0]);
+  const correction = pick('correction', weakest[0]);
   const openers = {
     strict: ['Sun, superstar', 'Guru ki adalat mein', 'Beta, ek minute'],
     warm: ['Arre wah, singer ji', 'Pyaara effort', 'Chalo, sur ki taraf'],
@@ -458,12 +500,16 @@ function stopRecording() {
     wav: encodeWav(samples, sr),
   };
   takes.unshift(take);
+  saveTake(take);
   els.recTime.textContent = '0:00';
   renderTakes();
 }
 
 function encodeWav(samples, sampleRate) {
   const n = samples.length;
+  let peak = 0;
+  for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(samples[i]));
+  const boost = peak > 0 ? Math.min(2.2, 0.92 / peak) : 1;
   const buffer = new ArrayBuffer(44 + n * 2);
   const view = new DataView(buffer);
   const writeStr = (o, s) => {
@@ -484,7 +530,7 @@ function encodeWav(samples, sampleRate) {
   view.setUint32(40, n * 2, true);
   let o = 44;
   for (let i = 0; i < n; i++) {
-    let s = samples[i];
+    let s = samples[i] * boost;
     if (s > 1) s = 1;
     else if (s < -1) s = -1;
     view.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true);
@@ -547,6 +593,9 @@ function renderTakes() {
 async function shareTakeVideo(take) {
   const context = audioCtx || new AudioContext();
   await context.resume();
+  if (!HTMLCanvasElement.prototype.captureStream || !window.MediaRecorder) {
+    return shareTakeAudio(take, context);
+  }
   const buffer = await context.decodeAudioData(take.wav.slice(0));
   const canvas = document.createElement('canvas');
   canvas.width = 720;
@@ -623,6 +672,7 @@ async function shareTakeVideo(take) {
     await navigator.share({ title: 'My Sur Guru riyaaz', files: [file] });
     return;
   }
+  if (navigator.share) return shareTakeAudio(take, context);
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = file.name;
@@ -630,28 +680,44 @@ async function shareTakeVideo(take) {
   setTimeout(() => URL.revokeObjectURL(link.href), 4000);
 }
 
-function togglePlayback(take, btn) {
-  if (!audioCtx) return;
+async function shareTakeAudio(take, context) {
+  const file = new File([take.wav], `${take.name.replace(/\s+/g, '-').toLowerCase()}.wav`, { type: 'audio/wav' });
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    await navigator.share({ title: 'My Sur Guru riyaaz audio', files: [file] });
+    return;
+  }
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([take.wav], { type: 'audio/wav' }));
+  link.download = file.name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 4000);
+}
+
+async function togglePlayback(take, btn) {
+  if (!audioCtx) audioCtx = new AudioContext({ latencyHint: 'interactive' });
+  await audioCtx.resume();
   if (currentAudio) {
+    const previousTakeId = currentAudio.takeId;
     stopPlayback();
-    if (currentAudio.takeId === take.id) {
+    if (previousTakeId === take.id) {
       btn.classList.remove('active');
       return;
     }
   }
-  const buf = audioCtx.createBuffer(1, take.wav.byteLength / 2 - 22, 48000);
-  const ch = buf.getChannelData(0);
-  const view = new DataView(take.wav);
-  for (let i = 0; i < ch.length; i++) {
-    const s = view.getInt16(44 + i * 2, true);
-    ch[i] = s / 32768;
-  }
+  const buf = await audioCtx.decodeAudioData(take.wav.slice(0));
   const src = audioCtx.createBufferSource();
   src.buffer = buf;
   const g = audioCtx.createGain();
-  g.gain.value = 0.9;
+  const compressor = audioCtx.createDynamicsCompressor();
+  g.gain.value = 1.35;
+  compressor.threshold.value = -18;
+  compressor.knee.value = 12;
+  compressor.ratio.value = 4;
+  compressor.attack.value = 0.003;
+  compressor.release.value = 0.18;
   src.connect(g);
-  g.connect(audioCtx.destination);
+  g.connect(compressor);
+  compressor.connect(audioCtx.destination);
   src.onended = () => {
     currentAudio = null;
     document.querySelectorAll('.playback').forEach((b) => b.classList.remove('active'));
@@ -719,4 +785,5 @@ populateSelectors();
 els.exerciseLabel.textContent = EXERCISES[els.exercise.value].label;
 renderScaleDots();
 resetScore();
+loadStoredTakes();
 drawTuner();

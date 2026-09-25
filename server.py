@@ -50,7 +50,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 data=json.dumps({
                     'text': text,
                     'model_id': os.environ.get('ELEVENLABS_MODEL_ID', 'eleven_multilingual_v2'),
-                    'voice_settings': {'stability': 0.48, 'similarity_boost': 0.8},
+                    'voice_settings': {
+                        'stability': 0.32,
+                        'similarity_boost': 0.78,
+                        'style': 0.72,
+                        'use_speaker_boost': True,
+                    },
                 }).encode(),
                 headers={'xi-api-key': key, 'Content-Type': 'application/json', 'Accept': 'audio/mpeg'},
                 method='POST',
