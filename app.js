@@ -199,10 +199,34 @@ function coachFeedback() {
   if (samples.length < 5) return 'Pehle microphone start karo aur kam se kam kuch seconds gaaoge. Guru hawa mein marks nahi deta.';
   const avg = samples.reduce((sum, item) => sum + item.cents, 0) / samples.length;
   const score = Number(els.overallScore.textContent) || 0;
-  const strict = els.mood.value === 'warm' ? 'Achha prayas' : els.mood.value === 'drill' ? 'Dhyaan se suno' : 'Sun, beta';
-  if (avg > 35) return `${strict}: sur kaafi idhar-udhar hai. Tanpura ke Sa ko pakdo, phir dheere gaa. ${score} marks, aur mehnat chahiye.`;
-  if (avg > 15) return `${strict}: note ke paas ho, lekin abhi sur hil raha hai. Saaf awaaz mein ek baar aur. ${score} marks.`;
-  return `${strict}: wah, sur pakad liya. Ab note ko stable rakho aur jaldi mat karo. ${score} marks, shabash.`;
+  const openers = {
+    strict: ['Sun, superstar', 'Guru ki adalat mein', 'Beta, ek minute'],
+    warm: ['Arre wah, singer ji', 'Pyaara effort', 'Chalo, sur ki taraf'],
+    drill: ['Attention, vocalist', 'No excuses, singer', 'Mic sambhalo, champion'],
+  };
+  const opener = openers[els.mood.value][Math.floor(Math.random() * 3)];
+  if (avg > 35) {
+    const roasts = [
+      'Aaj sur aur tum alag-alag WhatsApp groups mein the.',
+      'Note ko tumne itna miss kiya ki woh khud location share karne wala tha.',
+      'Yeh singing kam, musical treasure hunt zyada thi.',
+    ];
+    return `${opener}: ${roasts[Math.floor(Math.random() * roasts.length)]} Sa ko pakdo, dheere gaa, aur pitch ko ghar wapas lao. ${score}/100. Replay se pehle riyaaz.`;
+  }
+  if (avg > 15) {
+    const roasts = [
+      'Sur darwaze par tha, tumne bell nahi bajayi.',
+      'Gaana sahi direction mein hai, bas thoda Google Maps chahiye.',
+      'Note mil gaya tha, lekin tum dono ki dosti abhi nayi hai.',
+    ];
+    return `${opener}: ${roasts[Math.floor(Math.random() * roasts.length)]} Saaf awaaz mein, thoda slow, phir ek aur take. ${score}/100. Guru disappointed nahi, curious hai.`;
+  }
+  const wins = [
+    'Aaj sur ne tumhara naam yaad kar liya.',
+    'Wah, note ko pakda nahi, proper arrest kiya.',
+    'Aaj tum gaa nahi rahe the, sur tumhare saath gaa raha tha.',
+  ];
+  return `${opener}: ${wins[Math.floor(Math.random() * wins.length)]} Ab isi stability ko repeat karo, overconfidence ko nahi. ${score}/100. Shabash.`;
 }
 
 async function buildGraph() {
