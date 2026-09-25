@@ -197,36 +197,37 @@ async function speak(text) {
 function coachFeedback() {
   const samples = scoreSamples.slice(-100);
   if (samples.length < 5) return 'Pehle microphone start karo aur kam se kam kuch seconds gaaoge. Guru hawa mein marks nahi deta.';
-  const avg = samples.reduce((sum, item) => sum + item.cents, 0) / samples.length;
   const score = Number(els.overallScore.textContent) || 0;
+  const scores = {
+    sur: Number(els.pitchScore.textContent) || 0,
+    rhythm: Number(els.rhythmScore.textContent) || 0,
+    stability: Number(els.stabilityScore.textContent) || 0,
+  };
+  const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
+  const weakest = Object.entries(scores).sort((a, b) => a[1] - b[1])[0];
+  const praise = {
+    sur: 'Sur ne aaj tumhe seen-zone nahi kiya',
+    rhythm: 'Taal ne tumhara appointment accept kiya',
+    stability: 'Awaaz ne earthquake mode se break liya',
+  }[best[0]];
+  const roast = {
+    sur: 'Sur ko tumne GPS ke bina bhej diya',
+    rhythm: 'Taal tumse milne aayi thi, tum late pahunch gaye',
+    stability: 'Note itna hil raha tha ki usko seatbelt chahiye',
+  }[weakest[0]];
+  const correction = {
+    sur: 'drone suno aur note ke beech mein land karo',
+    rhythm: 'metronome ke saath dheere practice karo',
+    stability: 'ek note ko kam se kam teen seconds seedha hold karo',
+  }[weakest[0]];
   const openers = {
     strict: ['Sun, superstar', 'Guru ki adalat mein', 'Beta, ek minute'],
     warm: ['Arre wah, singer ji', 'Pyaara effort', 'Chalo, sur ki taraf'],
     drill: ['Attention, vocalist', 'No excuses, singer', 'Mic sambhalo, champion'],
   };
   const opener = openers[els.mood.value][Math.floor(Math.random() * 3)];
-  if (avg > 35) {
-    const roasts = [
-      'Aaj sur aur tum alag-alag WhatsApp groups mein the.',
-      'Note ko tumne itna miss kiya ki woh khud location share karne wala tha.',
-      'Yeh singing kam, musical treasure hunt zyada thi.',
-    ];
-    return `${opener}: ${roasts[Math.floor(Math.random() * roasts.length)]} Sa ko pakdo, dheere gaa, aur pitch ko ghar wapas lao. ${score}/100. Replay se pehle riyaaz.`;
-  }
-  if (avg > 15) {
-    const roasts = [
-      'Sur darwaze par tha, tumne bell nahi bajayi.',
-      'Gaana sahi direction mein hai, bas thoda Google Maps chahiye.',
-      'Note mil gaya tha, lekin tum dono ki dosti abhi nayi hai.',
-    ];
-    return `${opener}: ${roasts[Math.floor(Math.random() * roasts.length)]} Saaf awaaz mein, thoda slow, phir ek aur take. ${score}/100. Guru disappointed nahi, curious hai.`;
-  }
-  const wins = [
-    'Aaj sur ne tumhara naam yaad kar liya.',
-    'Wah, note ko pakda nahi, proper arrest kiya.',
-    'Aaj tum gaa nahi rahe the, sur tumhare saath gaa raha tha.',
-  ];
-  return `${opener}: ${wins[Math.floor(Math.random() * wins.length)]} Ab isi stability ko repeat karo, overconfidence ko nahi. ${score}/100. Shabash.`;
+  const verdict = weakest[1] < 55 ? `${roast}. ${correction}.` : `${roast}, par correction simple hai: ${correction}.`;
+  return `${opener}: ${praise}! Lekin ${verdict} Score ${score}/100. Agli take mein comeback dikhao.`;
 }
 
 async function buildGraph() {
